@@ -1,0 +1,16 @@
+"use client";
+import { useState } from "react";
+type Slot = { id: string; starts_at: string; ends_at: string; booked_by: string | null; location: string; preparation: string; attire: string; google_calendar_event_url: string | null; invitation_sent_at: string | null };
+export function AvailabilityForm({ initialSlots }: { initialSlots: Slot[] }) {
+	const [slots, setSlots] = useState(initialSlots); const [selected, setSelected] = useState(""); const [message, setMessage] = useState(""); const [busy, setBusy] = useState(false);
+	async function load() { const response = await fetch("/api/interviews"); const data = await response.json(); if (response.ok) setSlots(data.slots ?? []); else setMessage(data.error); }
+	async function book() {
+		if (!selected) return;
+		setBusy(true); setMessage("");
+		try { const response = await fetch("/api/interviews", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "book", slotId: selected }) }); const data = await response.json(); if (!response.ok) throw new Error(data.error); setMessage(data.message); await load(); }
+		catch (error) { setMessage(error instanceof Error ? error.message : "Could not reserve this time."); }
+		finally { setBusy(false); }
+	}
+	const booking = slots.find(slot => slot.booked_by);
+	return <section className="portal-card"><h2 className="text-2xl font-bold">Choose an interview time</h2><p className="mt-3 text-sm text-gray-400">Times are shown in your device timezone. Each opening can be reserved by one applicant.</p>{booking ? <div className="mt-6 border-t border-white/10 pt-5"><p className="font-semibold">{new Date(booking.starts_at).toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" })}</p>{booking.invitation_sent_at ? <><p className="mt-4 text-sm leading-6 text-gray-300">Location: {booking.location}<br />What to prepare: {booking.preparation}<br />What to wear: {booking.attire}</p>{booking.google_calendar_event_url && <a className="button mt-5 inline-block" href={booking.google_calendar_event_url} target="_blank" rel="noreferrer">Add to Google Calendar</a>}</> : <p className="mt-3 text-sm text-gray-400">Your time is reserved. Recruiting will send your formal invitation with location and preparation details.</p>}</div> : <div className="mt-6">{slots.length ? <><fieldset className="space-y-3"><legend className="sr-only">Available interview times</legend>{slots.map(slot => <label className="flex cursor-pointer items-center gap-3 border-t border-white/10 py-4 text-sm" key={slot.id}><input type="radio" name="interview-slot" value={slot.id} checked={selected === slot.id} onChange={() => setSelected(slot.id)} /><span>{new Date(slot.starts_at).toLocaleString("en-US", { dateStyle: "full", timeStyle: "short" })}</span></label>)}</fieldset><button type="button" className="button mt-5" disabled={!selected || busy} onClick={() => void book()}>{busy ? "Reserving…" : "Reserve selected time"}</button></> : <p className="border-t border-white/10 pt-5 text-sm text-gray-400">There are no open times right now. Recruiting will email you when availability is posted.</p>}</div>}{message && <p role="status" className="mt-5 text-sm">{message}</p>}</section>;
+}

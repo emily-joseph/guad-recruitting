@@ -37,6 +37,6 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ## Guadaloop recruitment portal
 
-The Spring 2027 applicant portal includes sign-in, saved applications, private PDF uploads, and an administrator-controlled recruiting window. Applications default to closed.
+The Spring 2027 applicant portal includes Google or email sign-in, saved applications, Google Drive resume links, and an administrator-controlled recruiting window. Applications default to closed.
 
 See [Recruitment setup](docs/recruitment-setup.md) for local testing, Supabase configuration, scheduling, and validation commands.

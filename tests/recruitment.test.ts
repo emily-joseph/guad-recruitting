@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { applicationSchema, blankApplication, draftSchema, teams, wordCount, validatePdf, MAX_FILE_SIZE } from "../lib/application-schema";
 import { closedWindow, isAccepting, fromAustinInput, toAustinInput, windowSchema } from "../lib/recruitment-window";
+import { isUtEmail } from "../lib/ut-email";
 
 test("applications default closed; scheduled opening inclusive and closing exclusive", () => {
   assert.equal(isAccepting(closedWindow), false);
@@ -21,11 +22,17 @@ test("Austin schedule uses CST/CDT independent of browser timezone and rejects D
   assert.throws(() => fromAustinInput("2027-03-14T02:30"));
   assert.throws(() => fromAustinInput("2027-11-07T01:30"));
 });
-const valid = { ...blankApplication("student@example.com"), name: "Test Student", eid: "ts1234", classification: "Sophomore", major: "Mechanical Engineering", referral: "Word of Mouth", team1: teams[0], team2: teams[1], infoSession: "Yes", leadership: "I helped our team find a direction.", setback: "I learned to ask for help.", motivation: "I want to build transportation systems.", song: "Sample song", movie: "Sample movie" };
+test("only UT Austin email domains are accepted for accounts", () => {
+  assert.equal(isUtEmail("student@utexas.edu"), true);
+  assert.equal(isUtEmail("student@my.utexas.edu"), true);
+  assert.equal(isUtEmail("student@example.com"), false);
+  assert.equal(isUtEmail("student@notutexas.edu"), false);
+});
+const valid = { ...blankApplication("student@example.com"), name: "Test Student", eid: "ts1234", classification: "Sophomore", major: "Mechanical Engineering", referral: "Word of Mouth", team1: teams[0], team2: teams[1], infoSession: "Yes", resumeUrl: "https://drive.google.com/file/d/resume/view", leadership: "I helped our team find a direction.", setback: "I learned to ask for help.", motivation: "I want to build transportation systems.", song: "Sample song", movie: "Sample movie" };
 test("drafts allow incomplete answers, but final applications require every required answer", () => {
   assert.equal(draftSchema.safeParse(blankApplication("student@example.com")).success, true);
   assert.equal(applicationSchema.safeParse(valid).success, true);
-  for (const field of ["name", "email", "eid", "classification", "major", "referral", "team1", "team2", "infoSession", "leadership", "setback", "motivation", "song", "movie"]) {
+  for (const field of ["name", "email", "eid", "classification", "major", "referral", "team1", "team2", "infoSession", "resumeUrl", "leadership", "setback", "motivation", "song", "movie"]) {
     assert.equal(applicationSchema.safeParse({ ...valid, [field]: "" }).success, false, field);
   }
 });
@@ -36,6 +43,7 @@ test("team choices and conditional referral validation cannot be bypassed", () =
   assert.equal(applicationSchema.safeParse({ ...valid, referral: "Other" }).success, false);
   assert.equal(applicationSchema.safeParse({ ...valid, referral: "Other", referralOther: "Student fair" }).success, true);
   assert.equal(applicationSchema.safeParse({ ...valid, infoSession: "No" }).success, true);
+  assert.equal(applicationSchema.safeParse({ ...valid, resumeUrl: "https://example.com/resume" }).success, false);
 });
 test("all three essays enforce 250 words with whitespace-aware counting", () => {
   assert.equal(wordCount("  one\n two\tthree  "), 3);

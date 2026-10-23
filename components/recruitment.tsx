@@ -4,7 +4,7 @@ import Image from "next/image";
 import podGraphic from "@/public/guadaloop-pod.png";
 
 export function Navbar() {
-  return <header className="site-header"><a href="#main-content" className="skip-link">Skip to content</a><div className="container flex flex-wrap items-center justify-between gap-6 py-6"><Brand /><nav aria-label="Main navigation" className="flex w-full items-center justify-between gap-5 text-sm sm:w-auto sm:gap-9"><Link className="nav-link" href="/#teams">Teams</Link><Link className="nav-link" href="/#faq">FAQ</Link><Link className="nav-link" href="/login">Login</Link><ButtonLink href="/apply" secondary>Apply</ButtonLink></nav></div></header>;
+  return <header className="site-header"><a href="#main-content" className="skip-link">Skip to content</a><div className="container flex flex-wrap items-center justify-between gap-6 py-6"><Brand /><nav aria-label="Main navigation" className="flex w-full items-center justify-between gap-5 text-sm sm:w-auto sm:gap-9"><Link className="nav-link" href="/#teams">Teams</Link><Link className="nav-link" href="/#faq">FAQ</Link><Link className="nav-link" href="/login">Login</Link><ButtonLink href="/login" secondary>Apply</ButtonLink></nav></div></header>;
 }
 export function Hero() {
   return (
@@ -15,7 +15,7 @@ export function Hero() {
         Help shape the future of transportation. Join a team of students at UT Austin bringing hyperloop technology to life.
       </p>
       <div className="mt-8 flex flex-wrap justify-center gap-4">
-        <ButtonLink href="/apply">Join Us</ButtonLink>
+        <ButtonLink href="/login">Join Us</ButtonLink>
         <ButtonLink href="/#teams" secondary>Explore Our Teams</ButtonLink>
       </div>
       <div className="mx-auto mt-12 max-w-5xl overflow-hidden rounded-lg">
@@ -37,11 +37,11 @@ export function FAQ() {
   return <section id="faq" className="container section-space grid gap-10 md:grid-cols-[1fr_1.25fr]"><div><Eyebrow>Frequently Asked Questions</Eyebrow><h2 className="section-title">Good questions.<br />Great beginnings.</h2></div><div>{[
     ['What does Guadaloop work on?', 'Texas Guadaloop is a student-led team at UT Austin exploring hyperloop technology. Engineering, business, and research come together to move the project forward.'],
     ['Where can I learn about each team?', 'Explore the Engineering and Business cards above, or follow the Research link. Each leads to the team’s page on the official Guadaloop website.'],
-    ['How can I apply?', 'Visit the spring application portal to check the application window. When applications open, sign in, complete the form, upload your resume, and submit before the deadline.'],
+    ['How can I apply?', 'Visit the spring application portal to check the application window. When applications open, sign in, complete the form, add a Google Drive link to your resume, and submit before the deadline.'],
   ].map(([question, answer]) => <details key={question} className="faq-item border-b border-white/15 py-5"><summary className="flex cursor-pointer list-none items-center justify-between gap-5 text-sm font-medium">{question}<span aria-hidden="true" className="faq-plus text-xl font-light text-accent">+</span></summary><p className="mt-4 max-w-lg text-sm leading-7 text-gray-300">{answer}</p></details>)}</div></section>;
 }
 export function Apply() {
-  return <section id="apply" className="apply-section relative overflow-hidden border-t border-white/10"><div className="container relative py-20 text-center sm:py-24"><p className="mb-6 text-sm text-accent">Your next challenge starts here</p><h2 className="text-4xl font-semibold tracking-[-0.045em] sm:text-6xl">The future needs builders.<br /><span className="text-gray-400">Let’s get to work.</span></h2><p className="mx-auto mb-8 mt-6 max-w-md text-sm leading-6 text-gray-300">Bring your curiosity. Find your team. Build something that moves us all forward.</p><ButtonLink href="/apply">Spring application portal</ButtonLink><p className="mt-5 text-xs text-gray-400">View recruitment dates, sign in, and manage your application.</p><a href="https://www.txguadaloop.org/" className="mt-5 inline-block text-sm text-accent hover:text-white">Discover Guadaloop ↗</a></div></section>;
+  return <section id="apply" className="apply-section relative overflow-hidden border-t border-white/10"><div className="container relative py-20 text-center sm:py-24"><p className="mb-6 text-sm text-accent">Your next challenge starts here</p><h2 className="text-4xl font-semibold tracking-[-0.045em] sm:text-6xl">The future needs builders.<br /><span className="text-gray-400">Let’s get to work.</span></h2><p className="mx-auto mb-8 mt-6 max-w-md text-sm leading-6 text-gray-300">Bring your curiosity. Find your team. Build something that moves us all forward.</p><ButtonLink href="/login">Sign in to apply</ButtonLink><p className="mt-5 text-xs text-gray-400">Create an account or sign in to start and manage your application.</p><a href="https://www.txguadaloop.org/" className="mt-5 inline-block text-sm text-accent hover:text-white">Discover Guadaloop ↗</a></div></section>;
 }
 export function Footer() {
   return <footer className="border-t border-white/10"><div className="container flex flex-col justify-between gap-8 py-10 md:flex-row md:items-center"><Brand /><p className="text-xs text-gray-400">Built in Austin. Moving the world forward.</p><a className="nav-link text-xs" href="https://www.txguadaloop.org/">Visit our main website ↗</a></div><div className="container border-t border-white/10 py-5 text-xs text-gray-400">© {new Date().getFullYear()} TEXAS GUADALOOP</div></footer>;
