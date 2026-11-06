@@ -4,7 +4,7 @@ The portal targets **Spring 2027**, inferred from the current Fall 2026 form. Th
 
 ## Try it locally
 
-The workspace has an ignored `.env.local` with `APPLICATION_TEST_MODE=true`.
+Copy `.env.example` to `.env.local`. For local role previews, explicitly set `APPLICATION_TEST_MODE=true`. Set it to `false` to test real Firebase login.
 
 1. Run `npm run dev` and open `http://localhost:3000/login`.
 2. Choose **Applicant**, **Guest viewer**, **Group interviewer**, **One-on-one interviewer**, **Recruiter**, or **Lead**, then start the local role preview. This is a sample identity, not email authentication; sign out to preview another role.
@@ -20,6 +20,10 @@ Test records are written under `.local-recruitment/`, which is ignored by Git an
 
 ## Connect real sign-in and persistence
 
+Run `npm run check:auth` before testing real login (Node 22.6+). This checks required values, matching project IDs, the service-account file, and its private key without printing credentials. A filled-in `FIREBASE_SERVICE_ACCOUNT_PATH` is not enough: download the JSON key from Firebase **Project settings > Service accounts > Generate new private key**, and save it at that exact path. The web app configuration/API key cannot replace this server credential. Development login pages show these setup problems directly; production does not disclose local configuration details.
+
+Email/password sign-in uses the password created for this recruitment portal. A UT EID password does not automatically create a Firebase account. First-time users must choose **Create account** and verify their school email, or use **Continue with Google** with a Google identity whose email is an accepted UT address. A school email that is not a Google account can use email/password signup. If signup creates the account but email delivery fails, use **Resend verification email**, not signup again.
+
 1. Create a Firebase project and enable **Email/Password** and **Google** sign-in providers in Authentication. Create a Cloud Firestore database and deploy `firestore.rules` from this repo (`firebase deploy --only firestore:rules`). The app stores application data in Firestore through the server Admin SDK; browser database access is denied by the rules. Resumes stay in Google Drive, so the app does not need Cloud Storage.
 2. Copy the values from `.env.example` into your local environment or deployment settings:
    - `APPLICATION_TEST_MODE=false`
@@ -33,7 +37,7 @@ Test records are written under `.local-recruitment/`, which is ignored by Git an
    - `RECRUITING_ADMIN_EMAILS` — comma-separated verified email addresses allowed to change the window.
    - `RESEND_API_KEY` and `RECRUITING_FROM_EMAIL` — optional, but required for application receipts, interview emails, and referral email notifications. Verify the sender domain with Resend.
    - `RECRUITING_TEAM_EMAILS` — optional JSON object mapping exact team names to recipient email addresses, for example `{"Engineering":"engineering@example.org","Business":"business@example.org"}`.
-3. Add your deployed domain and localhost to Firebase Authentication's authorized domains. Configure the Firebase verification and reset email templates to return to `/auth/callback`.
+3. Add your deployed domain and localhost to Firebase Authentication's authorized domains. Customize the action URL for verification and password reset email templates to `https://your-domain/auth/callback` (use your localhost origin for local testing). This is the action handler URL, not the continue URL; the app sets the continue URL to `/login`. The default Firebase hosted email handler also works.
 4. Restart the app. Create and verify a UT account, add your lead email to `RECRUITING_ADMIN_EMAILS`, then visit `/admin/recruitment`.
 5. Keep the window **Closed** until ready, then save an opening and deadline using **Scheduled**.
 
@@ -72,6 +76,8 @@ The portal root redirects to `/login`. The organization’s Join/Apply button sh
 Internal transfer windows and request reviews are managed separately at `/admin/transfers`. Completion reminders are sent manually by an editor from the application review page.
 
 ## Checks
+
+Firebase auth regression tests are included in `npm test`. Run `npx playwright test --config tests/auth.playwright.config.ts` to exercise the sign-in UI and API validation. It starts an isolated local fixture on port 3101 with generated test credentials that have no Firebase access. These UI tests mock auth responses and create no remote accounts. `TEST_ORIGIN` can instead point to an already-running server with valid configuration and preview mode disabled. Live Google sign-in, email delivery, and service account access still require a configured Firebase project.
 
 ```sh
 npm run lint

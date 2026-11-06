@@ -6,6 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "check:auth": "node --experimental-strip-types scripts/check-auth.mjs",
     "lint": "eslint app components lib tests proxy.ts next.config.ts eslint.config.mjs postcss.config.mjs",
     "test": "tsx --test tests/*.test.ts"
   },

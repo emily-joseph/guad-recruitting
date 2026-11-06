@@ -4,8 +4,9 @@ import { randomBytes, createHmac, timingSafeEqual } from "node:crypto";
 import { firebaseAuth, firestore } from "./firebase";
 import { backendReady, testMode } from "./config";
 import { isUtEmail } from "../ut-email";
+import { isInvalidFirebaseSession, normalizeSessionError, recruitingPermissions, validateSessionClaims, type RecruitingRole } from "../session-policy";
 
-export type RecruitingRole = "viewer" | "recruiter" | "group_interviewer" | "one_on_one_interviewer";
+export type { RecruitingRole } from "../session-policy";
 export type TestRole = "applicant" | "viewer" | RecruitingRole | "lead";
 export type Applicant = { id: string; email: string; admin: boolean; editor: boolean; member: boolean; groupInterviewer: boolean; oneOnOneInterviewer: boolean; test: boolean; previewRole?: TestRole };
 const globals = globalThis as typeof globalThis & { guadTestSecret?: string };
@@ -22,11 +23,15 @@ export async function startTestSession(role: TestRole = "lead") {
 }
 export async function clearTestSession() { (await cookies()).delete("guad-test"); }
 export async function setFirebaseSession(idToken: string) {
-  const decoded = await firebaseAuth().verifyIdToken(idToken);
-  if (!decoded.email || !isUtEmail(decoded.email)) throw new Error("Use your @utexas.edu or @my.utexas.edu account to access the portal.");
-  const signedInWithGoogle = decoded.firebase?.sign_in_provider === "google.com";
-  if (!decoded.email_verified && !signedInWithGoogle) throw new Error("Verify your email address before signing in.");
-  const session = await firebaseAuth().createSessionCookie(idToken, { expiresIn: 5 * 24 * 60 * 60 * 1000 });
+  // Initialize outside the credential-error handler: invalid server credentials
+  // must not be reported as an invalid user token.
+  const auth = firebaseAuth();
+  let session: string;
+  try {
+    const decoded = await auth.verifyIdToken(idToken, true);
+    validateSessionClaims(decoded);
+    session = await auth.createSessionCookie(idToken, { expiresIn: 5 * 24 * 60 * 60 * 1000 });
+  } catch (error) { throw normalizeSessionError(error) ?? error; }
   (await cookies()).set("guad-session", session, { httpOnly: true, secure: process.env.NODE_ENV === "production", sameSite: "lax", path: "/", maxAge: 5 * 24 * 60 * 60 });
 }
 export async function clearFirebaseSession() { (await cookies()).delete("guad-session"); }
@@ -41,17 +46,19 @@ export async function getApplicant(): Promise<Applicant | null> {
   if (!backendReady()) return null;
   const sessionCookie = (await cookies()).get("guad-session")?.value;
   if (!sessionCookie) return null;
+  const auth = firebaseAuth();
   let user: Awaited<ReturnType<ReturnType<typeof firebaseAuth>["getUser"]>>;
   try {
-    const decoded = await firebaseAuth().verifySessionCookie(sessionCookie, true);
-    user = await firebaseAuth().getUser(decoded.uid);
-  } catch { return null; }
-  const hasVerifiedGoogleAccount = user.providerData.some(provider => provider.providerId === "google.com");
-  if (!user.email || (!user.emailVerified && !hasVerifiedGoogleAccount) || !isUtEmail(user.email)) return null;
+    const decoded = await auth.verifySessionCookie(sessionCookie, true);
+    user = await auth.getUser(decoded.uid);
+  } catch (error) {
+    if (isInvalidFirebaseSession(error)) return null;
+    throw error;
+  }
+  if (user.disabled || !user.email || !user.emailVerified || !isUtEmail(user.email)) return null;
   const admins = (process.env.RECRUITING_ADMIN_EMAILS ?? "").split(",").map(email => email.trim().toLowerCase()).filter(Boolean);
   const email = user.email.toLowerCase();
   const admin = admins.includes(email);
-  const access = await firestore().collection("recruiting_member_access").doc(email).get();
-  const role = access.data()?.role as RecruitingRole | undefined;
-  return { id: user.uid, email: user.email, admin, editor: admin || role === "recruiter", member: admin || Boolean(role), groupInterviewer: admin || role === "recruiter" || role === "group_interviewer", oneOnOneInterviewer: admin || role === "recruiter" || role === "one_on_one_interviewer", test: false };
+  const role = admin ? undefined : (await firestore().collection("recruiting_member_access").doc(email).get()).data()?.role;
+  return { id: user.uid, email: user.email, ...recruitingPermissions(admin, role), test: false };
 }
