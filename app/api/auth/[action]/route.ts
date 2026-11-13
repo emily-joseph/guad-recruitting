@@ -6,9 +6,10 @@ import { checkOrigin, fail, limitedBody } from "@/lib/server/http";
 import { isUtEmail, utEmailMessage } from "@/lib/ut-email";
 
 export async function POST(request: Request, context: { params: Promise<{ action: string }> }) {
+  let action = "";
   try {
     checkOrigin(request);
-    const { action } = await context.params;
+    ({ action } = await context.params);
     if (action === "test") {
       if (!testMode()) return fail("Local testing is disabled.", 404);
       const raw = await limitedBody(request, 2000);
@@ -61,5 +62,11 @@ export async function POST(request: Request, context: { params: Promise<{ action
     if (signedIn.emailVerified !== true) return fail("Confirm your email from the link we sent before signing in.", 401);
     await setFirebaseSession(String(signedIn.idToken));
     return Response.json({ redirect: "/apply" });
-  } catch { return fail("We couldn't complete that request. Please try again."); }
+  } catch (error) {
+    const firebaseError = error instanceof Error ? error.message : "";
+    if (action === "login" && /EMAIL_NOT_FOUND|INVALID_LOGIN_CREDENTIALS/i.test(firebaseError)) {
+      return fail("No email-and-password account exists for that address. If this is your UT Google account, choose Continue with Google instead.", 401);
+    }
+    return fail("We couldn't complete that request. Please try again.");
+  }
 }
