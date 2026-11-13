@@ -2,14 +2,22 @@ import { z } from "zod";
 import { firebaseIdentityRequest } from "@/lib/server/firebase";
 import { backendReady, testMode } from "@/lib/server/config";
 import { startTestSession, clearTestSession, clearFirebaseSession, setFirebaseSession } from "@/lib/server/session";
-import { checkOrigin, fail, limitedBody } from "@/lib/server/http";
-import { isUtEmail, utEmailMessage } from "@/lib/ut-email";
+import { checkOrigin, fail, limitedBody, HttpRequestError } from "@/lib/server/http";
+import { runEmailAuth, AuthInputError } from "@/lib/auth-flow";
+import { FirebaseIdentityError } from "@/lib/auth-errors";
+import { FirebaseConfigurationError, inspectFirebaseConfiguration } from "@/lib/server/firebase-config";
+import { AuthSessionError } from "@/lib/session-policy";
+import { authActionOrigin } from "@/lib/request-origin";
+
+function configurationFailure() {
+  const issues = process.env.NODE_ENV === "development" ? inspectFirebaseConfiguration().issues.join(" ") : "Contact the recruiting team.";
+  return fail(`Firebase sign-in setup is incomplete. ${issues}`, 503);
+}
 
 export async function POST(request: Request, context: { params: Promise<{ action: string }> }) {
-  let action = "";
   try {
     checkOrigin(request);
-    ({ action } = await context.params);
+    const { action } = await context.params;
     if (action === "test") {
       if (!testMode()) return fail("Local testing is disabled.", 404);
       const raw = await limitedBody(request, 2000);
@@ -20,12 +28,12 @@ export async function POST(request: Request, context: { params: Promise<{ action
       return Response.json({ redirect: "/apply" });
     }
     if (action === "google") {
-      if (testMode() || !backendReady()) return fail("Google sign-in is not configured yet.", 503);
-      const body = JSON.parse(new TextDecoder().decode(await limitedBody(request, 4096)));
+      if (testMode()) return fail("Local role previews are enabled. Set APPLICATION_TEST_MODE=false to test Firebase sign-in.", 503);
+      if (!backendReady()) return configurationFailure();
+      const body = JSON.parse(new TextDecoder().decode(await limitedBody(request, 16384)));
       const parsed = z.object({ idToken: z.string().min(1).max(10000) }).safeParse(body);
       if (!parsed.success) return fail("Google sign-in did not return a valid credential.", 400);
-      try { await setFirebaseSession(parsed.data.idToken); }
-      catch (error) { return fail(error instanceof Error ? error.message : "This Google account cannot access the portal.", 403); }
+      await setFirebaseSession(parsed.data.idToken);
       return Response.json({ redirect: "/apply" });
     }
     if (action === "signout") {
@@ -33,40 +41,22 @@ export async function POST(request: Request, context: { params: Promise<{ action
       await clearFirebaseSession();
       return Response.json({ redirect: "/login" });
     }
-    if (!["login", "signup", "forgot", "reset"].includes(action)) return fail("Not found.", 404);
-    if (testMode() || !backendReady()) return fail("Email sign-in will be available once the recruitment portal is connected.", 503);
+    if (!["login", "signup", "forgot", "reset", "resend"].includes(action)) return fail("Not found.", 404);
+    if (testMode()) return fail("Local role previews are enabled. Set APPLICATION_TEST_MODE=false to test Firebase sign-in.", 503);
+    if (!backendReady()) return configurationFailure();
     const body = JSON.parse(new TextDecoder().decode(await limitedBody(request, 4096)));
-    if (action === "forgot") {
-      const parsed = z.object({ email: z.email().max(300) }).safeParse(body);
-      if (!parsed.success) return fail("Enter a valid email address.");
-      if (!isUtEmail(parsed.data.email)) return fail(utEmailMessage);
-      await firebaseIdentityRequest("accounts:sendOobCode", { requestType: "PASSWORD_RESET", email: parsed.data.email });
-      return Response.json({ message: "If an account exists for that email, you’ll receive a password reset link. Open it in this browser." });
-    }
-    if (action === "reset") {
-      const parsed = z.object({ password: z.string().min(12).max(128), oobCode: z.string().min(1) }).safeParse(body);
-      if (!parsed.success) return fail("Use a password with 12–128 characters.");
-      await firebaseIdentityRequest("accounts:resetPassword", { oobCode: parsed.data.oobCode, newPassword: parsed.data.password });
-      return Response.json({ redirect: "/login?password=updated" });
-    }
-    const parsed = z.object({ email: z.email().max(300), password: z.string().min(action === "signup" ? 12 : 1).max(128) }).safeParse(body);
-    if (!parsed.success) return fail("Enter a valid email and password. New passwords must have at least 12 characters.");
-    if (!isUtEmail(parsed.data.email)) return fail(utEmailMessage);
-    const origin = process.env.APP_ORIGIN || new URL(request.url).origin;
-    if (action === "signup") {
-      const created = await firebaseIdentityRequest("accounts:signUp", { ...parsed.data, returnSecureToken: "true" });
-      await firebaseIdentityRequest("accounts:sendOobCode", { requestType: "VERIFY_EMAIL", idToken: String(created.idToken), continueUrl: `${origin}/auth/callback` });
-      return Response.json({ message: "Check your email to confirm your account, then return here to sign in." });
-    }
-    const signedIn = await firebaseIdentityRequest("accounts:signInWithPassword", { ...parsed.data, returnSecureToken: "true" });
-    if (signedIn.emailVerified !== true) return fail("Confirm your email from the link we sent before signing in.", 401);
-    await setFirebaseSession(String(signedIn.idToken));
-    return Response.json({ redirect: "/apply" });
+    const result = await runEmailAuth(action, body, authActionOrigin(request.url, process.env.APP_ORIGIN, process.env.NODE_ENV === "development"), {
+      identity: firebaseIdentityRequest,
+      session: setFirebaseSession,
+    });
+    return Response.json(result, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
-    const firebaseError = error instanceof Error ? error.message : "";
-    if (action === "login" && /EMAIL_NOT_FOUND|INVALID_LOGIN_CREDENTIALS/i.test(firebaseError)) {
-      return fail("No email-and-password account exists for that address. If this is your UT Google account, choose Continue with Google instead.", 401);
-    }
-    return fail("We couldn't complete that request. Please try again.");
+    if (error instanceof HttpRequestError || error instanceof AuthSessionError) return fail(error.message, error.status);
+    if (error instanceof AuthInputError || error instanceof FirebaseIdentityError) return fail(error.message);
+    if (error instanceof FirebaseConfigurationError) return configurationFailure();
+    if (error instanceof SyntaxError) return fail("The request could not be read. Reload the page and try again.");
+    // Never return raw Admin SDK messages, which can contain local paths or credentials.
+    console.error("[auth] Authentication service failed", { code: typeof (error as { code?: unknown })?.code === "string" ? (error as { code: string }).code : "service-unavailable" });
+    return fail("The sign-in service is unavailable. Please try again shortly. If it continues, contact the recruiting team.", 503);
   }
 }
